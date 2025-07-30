@@ -22,7 +22,7 @@ local OVERCHARGE_RES_EMPTY_RATE = 0.03
 
 local FILL_RATE = 30
 local EMPTY_RATE = 20
-local EMERGENCY_EMPTY_RATE = 60
+local EMERGENCY_EMPTY_RATE = 70
 
 ---Regulates pressure in brake pipe based on the pressure in control chamber.
 ---@class DistributorValve
@@ -33,7 +33,7 @@ local EMERGENCY_EMPTY_RATE = 60
 ---@field private average MovingAverage
 local DistributorValve = {
     MAX_HYSTERESIS = 0.1,
-    MIN_HYSTERESIS = 0.001,
+    MIN_HYSTERESIS = 0.003,
     hysteresis = 0,
     position = 0,
     controlChamber = {},
@@ -47,7 +47,7 @@ function DistributorValve:new()
     ---@type DistributorValve
     local obj = {
         controlChamber = Reservoir:new(0.3),
-        average = MovingAverage:new(10)
+        average = MovingAverage:new(3)
     }
     obj = setmetatable(obj, self)
     obj.controlChamber.pressure = 5
@@ -56,33 +56,27 @@ function DistributorValve:new()
 end
 
 ---Updates position accordingly to pressure in control chamber and overcharge reservoir.
----`Author:` Jáchym Hurtík https://github.com/JachyHm/RailWorksLUAscriptExamples/blob/master/script_460.lua#L4026
----`Modification:` 1ab0ra0try
 ---@param deltaTime number
 ---@param brakePipe Reservoir
 ---@param overchargePressure number
 function DistributorValve:update(deltaTime, brakePipe, overchargePressure)
     local pressureDiff = self.controlChamber.pressure - brakePipe.pressure + overchargePressure / 12.5
-
-    self.average:sample(MathUtil.clamp(3 * pressureDiff, -1, 1))
-
-    local positionTarget = self.average:get()
+    local positionTarget = MathUtil.clamp(3 * pressureDiff, -1, 1)
     local positionDelta = math.abs(positionTarget - self.position)
 
     if math.abs(self.position) < 0.001 and positionDelta < 0.001 then
-        self.hysteresis = math.min(self.MAX_HYSTERESIS, self.hysteresis + self.MAX_HYSTERESIS *  deltaTime / 10)
+        self.hysteresis = math.min(self.MAX_HYSTERESIS, self.hysteresis + deltaTime / 10)
     elseif positionDelta > 0.001 then
         self.hysteresis = math.max(self.MIN_HYSTERESIS, self.hysteresis - math.sqrt(positionDelta) * deltaTime)
     end
+    self.average:sample(positionTarget)
 
     if math.abs(self.position) < 0.001 and math.abs(positionTarget) < 0.001 then
         self.position = 0
     elseif self.position < positionTarget - self.hysteresis then
-        self.position = MathUtil.towards(self.position, positionTarget, 4 * deltaTime)
-        self.hysteresis = self.MIN_HYSTERESIS
+        self.position = MathUtil.towards(self.position, self.average:get(), deltaTime)
     elseif self.position > positionTarget + self.hysteresis then
-        self.position = MathUtil.towards(self.position, positionTarget, 4 * deltaTime)
-        self.hysteresis = self.MIN_HYSTERESIS
+        self.position = MathUtil.towards(self.position, self.average:get(), deltaTime)
     end
 end
 
