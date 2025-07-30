@@ -11,7 +11,7 @@ local HOSE_LENGTH = 5 --decimetres
 ---@class Vehicle
 ---@field private length number
 ---@field private pipeCapcity number
----@field public brakePipe Reservoir
+---@field private brakePipe Reservoir
 ---@field private feedPipe Reservoir
 ---@field private brakeValve table
 ---@field private distributor table
