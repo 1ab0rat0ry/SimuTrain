@@ -1,88 +1,80 @@
 ---@type Reservoir
-local Reservoir = require "Assets/1ab0rat0ry/RWLab/simulation/brake/common/Reservoir.out"
+local Reservoir = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/common/Reservoir.out"
 ---@type MathUtil
-local MathUtil = require "Assets/1ab0rat0ry/RWLab/utils/math/MathUtil.out"
----@type MovingAverage
-local MovingAverage = require "Assets/1ab0rat0ry/RWLab/utils/math/MovingAverage.out"
+local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.out"
 
 local REFERENCE_PRESSURE = 5
 local MIN_REDUCTION_PRESSURE_DROP = 0.3
 local MAX_REDUCTION_PRESSURE_DROP = 2
 local FULL_SERVICE_PRESSURE_DROP = 1.5
 
-local CONTROL_RES_CAPACITY = 1
+local CONTROL_RES_CAPACITY = 0.001
 local CONTROL_RES_CHANGE_TIME = 3
 local CONTROL_RES_CHANGE_RATE = FULL_SERVICE_PRESSURE_DROP / CONTROL_RES_CHANGE_TIME
 
 local OVERCHARGE_PRESSURE = 5.4
-local OVERCHGARGE_RES_CAPACITY = 5
+local OVERCHGARGE_RES_CAPACITY = 0.005
 local OVERCHARGE_RES_FILL_TIME = 8
 local OVERCHARGE_RES_FILL_RATE = OVERCHARGE_PRESSURE / OVERCHARGE_RES_FILL_TIME
 local OVERCHARGE_RES_EMPTY_RATE = 0.03
 
-local FILL_RATE = 30
-local EMPTY_RATE = 20
-local EMERGENCY_EMPTY_RATE = 60
+local DIST_VALVE_HYSTERESIS = 0.01
+
+local FILL_CHOKE = 1e-4
+local EMPTY_CHOKE = 1e-4
+local EMERGENCY_CHOKE = 3e-4
 
 ---Regulates pressure in brake pipe based on the pressure in control chamber.
 ---@class DistributorValve
----@field private MAX_HYSTERESIS number
----@field private hysteresis number
+---@field private MAX_RESISTANCE number
+---@field private resistance number
 ---@field public position number
 ---@field public controlChamber Reservoir
 ---@field private average MovingAverage
 local DistributorValve = {
-    MAX_HYSTERESIS = 0.1,
-    MIN_HYSTERESIS = 0.001,
-    hysteresis = 0,
+    MAX_RESISTANCE = 0.1,
+    MIN_RESISTANCE = 0.001,
+    resistance = 0,
     position = 0,
-    controlChamber = {},
-    average = {}
+    controlChamber = {}
 }
 DistributorValve.__index = DistributorValve
-DistributorValve.hysteresis = DistributorValve.MAX_HYSTERESIS
+DistributorValve.resistance = DistributorValve.MAX_RESISTANCE
 
 ---@return DistributorValve
 function DistributorValve:new()
     ---@type DistributorValve
-    local obj = {
-        controlChamber = Reservoir:new(0.3),
-        average = MovingAverage:new(10)
+    local instance = {
+        controlChamber = Reservoir:new(0.0003)
     }
-    obj = setmetatable(obj, self)
-    obj.controlChamber.pressure = 5
+    instance = setmetatable(instance, self)
+    instance.controlChamber.pressure = 601325
 
-    return obj
+    return instance
 end
 
 ---Updates position accordingly to pressure in control chamber and overcharge reservoir.
----`Author:` Jáchym Hurtík https://github.com/JachyHm/RailWorksLUAscriptExamples/blob/master/script_460.lua#L4026
----`Modification:` 1ab0ra0try
 ---@param deltaTime number
 ---@param brakePipe Reservoir
 ---@param overchargePressure number
 function DistributorValve:update(deltaTime, brakePipe, overchargePressure)
-    local pressureDiff = self.controlChamber.pressure - brakePipe.pressure + overchargePressure / 12.5
-
-    self.average:sample(MathUtil.clamp(3 * pressureDiff, -1, 1))
-
-    local positionTarget = self.average:get()
+    local pressureDiff = self.controlChamber:getManoPressure() - brakePipe:getManoPressure() + overchargePressure / 12.5
+    local positionTarget = MathUtil.clamp(3 * pressureDiff, -1, 1)
     local positionDelta = math.abs(positionTarget - self.position)
 
-    if math.abs(self.position) < 0.001 and positionDelta < 0.001 then
-        self.hysteresis = math.min(self.MAX_HYSTERESIS, self.hysteresis + self.MAX_HYSTERESIS *  deltaTime / 10)
-    elseif positionDelta > 0.001 then
-        self.hysteresis = math.max(self.MIN_HYSTERESIS, self.hysteresis - math.sqrt(positionDelta) * deltaTime)
+    if positionDelta < DIST_VALVE_HYSTERESIS then
+        self.resistance = math.min(self.MAX_RESISTANCE, self.resistance + self.MAX_RESISTANCE * deltaTime / 10)
+    elseif positionDelta > DIST_VALVE_HYSTERESIS then
+        self.resistance = math.max(self.MIN_RESISTANCE, self.resistance - positionDelta * deltaTime)
     end
+    --Call("SetControlValue", "PositionTarget", 0, positionTarget)
 
-    if math.abs(self.position) < 0.001 and math.abs(positionTarget) < 0.001 then
-        self.position = 0
-    elseif self.position < positionTarget - self.hysteresis then
-        self.position = MathUtil.towards(self.position, positionTarget, 4 * deltaTime)
-        self.hysteresis = self.MIN_HYSTERESIS
-    elseif self.position > positionTarget + self.hysteresis then
-        self.position = MathUtil.towards(self.position, positionTarget, 4 * deltaTime)
-        self.hysteresis = self.MIN_HYSTERESIS
+    if math.abs(self.position) < DIST_VALVE_HYSTERESIS and math.abs(positionTarget) < DIST_VALVE_HYSTERESIS then
+        self.position = MathUtil.towards(self.position, 0, deltaTime)
+    elseif self.position < positionTarget - self.resistance then
+        self.position = MathUtil.towards(self.position, positionTarget, 2 * positionDelta * deltaTime)
+    elseif self.position > positionTarget + self.resistance then
+        self.position = MathUtil.towards(self.position, positionTarget, 2 * positionDelta * deltaTime)
     end
 end
 
@@ -132,22 +124,22 @@ DakoBs2.__index = DakoBs2
 ---@return DakoBs2
 function DakoBs2:new(notches)
     ---@type DakoBs2
-    local obj = {
+    local instance = {
         notches = notches,
         distributorValve = DistributorValve:new(),
         controlRes = Reservoir:new(CONTROL_RES_CAPACITY),
         overchargeRes = Reservoir:new(OVERCHGARGE_RES_CAPACITY)
     }
-    obj = setmetatable(obj, self)
-    obj.ranges.RELEASE = obj.notches.RELEASE + (obj.notches.RUNNING - obj.notches.RELEASE) / 2
-    obj.ranges.RUNNING = obj.notches.RUNNING + (obj.notches.NEUTRAL - obj.notches.RUNNING) / 2
-    obj.ranges.NEUTRAL = obj.notches.NEUTRAL + (obj.notches.MIN_REDUCTION - obj.notches.NEUTRAL) / 2
-    obj.ranges.SERVICE = obj.notches.MAX_REDUCTION + (obj.notches.CUTOFF - obj.notches.MAX_REDUCTION) / 2
-    obj.ranges.CUTOFF = obj.notches.CUTOFF + (obj.notches.EMERGENCY - obj.notches.CUTOFF) / 2
-    obj.ranges.EMERGENCY = obj.notches.EMERGENCY
-    obj.controlRes.pressure = 5
+    instance = setmetatable(instance, self)
+    instance.ranges.RELEASE = instance.notches.RELEASE + (instance.notches.RUNNING - instance.notches.RELEASE) / 2
+    instance.ranges.RUNNING = instance.notches.RUNNING + (instance.notches.NEUTRAL - instance.notches.RUNNING) / 2
+    instance.ranges.NEUTRAL = instance.notches.NEUTRAL + (instance.notches.MIN_REDUCTION - instance.notches.NEUTRAL) / 2
+    instance.ranges.SERVICE = instance.notches.MAX_REDUCTION + (instance.notches.CUTOFF - instance.notches.MAX_REDUCTION) / 2
+    instance.ranges.CUTOFF = instance.notches.CUTOFF + (instance.notches.EMERGENCY - instance.notches.CUTOFF) / 2
+    instance.ranges.EMERGENCY = instance.notches.EMERGENCY
+    instance.controlRes.pressure = 601325
 
-    return obj
+    return instance
 end
 
 ---Updates the whole brake valve.
@@ -201,24 +193,25 @@ function DakoBs2:updateControlMechanism(deltaTime, position, feedPipe, brakePipe
     elseif position <= self.ranges.EMERGENCY then
         --open emergency valve, close interrupt valve to prevent unwanted refilling
         self.emergencyValve = true
-        self.interruptValve = MathUtil.towards(self.interruptValve, 0, 2 * deltaTime)
+        self.interruptValve = MathUtil.towards(self.interruptValve, 0, 4 * deltaTime)
         self.releaseValve = false
     end
 
-    local changeRate = CONTROL_RES_CHANGE_RATE * 4 * math.abs(self.setPressure - self.controlRes.pressure)
+    local changeRate = math.min(1, 4 * math.abs(self.setPressure - self.controlRes:getManoPressure()))
 
     --equalize control reservoir to set pressure
-    if self.setPressure > self.controlRes.pressure then
-        self.controlRes:equalize(feedPipe, deltaTime, 1, changeRate)
-    elseif self.setPressure < self.controlRes.pressure then
-        self.controlRes:vent(deltaTime, 1, changeRate)
+    if self.setPressure > self.controlRes:getManoPressure() then
+        self.controlRes:equalize(feedPipe, 1e-6 * changeRate, deltaTime)
+    elseif self.setPressure < self.controlRes:getManoPressure() then
+        self.controlRes:vent(1e-6 * changeRate, deltaTime)
     end
 
     --quickly vent brake pipe
-    if self.emergencyValve then brakePipe:vent(deltaTime, EMERGENCY_EMPTY_RATE) end
-    --connect control chamber with feed pipe or control reservoir
-    if self.releaseValve then self.distributorValve.controlChamber:equalize(feedPipe, deltaTime)
-    else self.distributorValve.controlChamber:equalize(self.controlRes, deltaTime)
+    if self.emergencyValve then brakePipe:vent(EMERGENCY_CHOKE, deltaTime) end
+    --connect control chamber with feed pipe when handle is in RELEASE position
+    --otherwise connect it with control reservoir
+    if self.releaseValve then self.distributorValve.controlChamber:equalize(feedPipe, 1e-6, deltaTime)
+    else self.distributorValve.controlChamber:equalize(self.controlRes, 1e-6, deltaTime)
     end
 end
 
@@ -228,14 +221,14 @@ end
 ---@param feedPipe Reservoir
 ---@param brakePipe Reservoir
 function DakoBs2:updateDistributorMechanism(deltaTime, feedPipe, brakePipe)
-    self.distributorValve:update(deltaTime, brakePipe, self.overchargeRes.pressure)
+    self.distributorValve:update(deltaTime, brakePipe, self.overchargeRes:getManoPressure())
 
     if self.distributorValve.position > 0 then
-        local fillRate = FILL_RATE * math.min(self.interruptValve, self.distributorValve.position)
-        brakePipe:equalize(feedPipe, deltaTime, fillRate)
+        local fillRate = FILL_CHOKE * math.min(self.interruptValve, self.distributorValve.position)
+        brakePipe:equalize(feedPipe, fillRate, deltaTime)
     elseif self.distributorValve.position < 0 then
-        local emptyRate = EMPTY_RATE * math.abs(self.distributorValve.position)
-        brakePipe:vent(deltaTime, emptyRate)
+        local emptyRate = EMPTY_CHOKE * math.max(self.interruptValve, self.distributorValve.position)
+        brakePipe:vent(emptyRate, deltaTime)
     end
 end
 
@@ -246,11 +239,11 @@ end
 ---@param feedPipe Reservoir
 ---@param brakePipe Reservoir
 function DakoBs2:updateOvercharge(deltaTime, feedPipe, brakePipe)
-    if self.overchargeRes.pressure > 0 then self.overchargeRes:vent(deltaTime, 1, OVERCHARGE_RES_EMPTY_RATE) end
-    if self.distributorValve.controlChamber.pressure > 5.1 and self.distributorValve.position > 0.3 then
-        self.overchargeRes:equalize(feedPipe, deltaTime, 0.335)
+    if self.overchargeRes:getManoPressure() > 0 then self.overchargeRes:vent(0.5e-6, deltaTime) end
+    if self.distributorValve.controlChamber:getManoPressure() > 5.1 and self.distributorValve.position > 0.3 then
+        self.overchargeRes:equalize(feedPipe, 1e-6, deltaTime)
     elseif self.hasOvercharge and Call("GetControlValue", "Overcharge", 0) > 0.5 then
-        self.overchargeRes:equalize(brakePipe, deltaTime, 0.335)
+        self.overchargeRes:equalize(brakePipe, 1e-6, deltaTime)
     end
 end
 

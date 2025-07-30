@@ -1,5 +1,8 @@
 ---@class MathUtil
-local MathUtil = {}
+local MathUtil = {
+    INF = 1 / 0,
+    NAN = 0 / 0
+}
 
 ---@param num number
 ---@param min number
@@ -50,9 +53,9 @@ function MathUtil.towards(num, target, step)
 end
 
 ---@param num number
----@return number for negative numbers `-1`, for `0` and positive `1`
+---@return number for negative numbers `-1`, for zero `0`, for positive numbers `1`
 function MathUtil.sign(num)
-    return num < 0 and -1 or 1
+    return num > 0 and 1 or num < 0 and -1 or 0
 end
 
 ---@param num number
@@ -63,12 +66,18 @@ function MathUtil.round(num, places)
     return math.floor(num * factor + 0.5) / factor
 end
 
---function MathUtil.randomFloat(min, max)
---    return math.random() * (max - min) + min
---end
+---Calculates circular area with given `radius`.
+---@param radius number
+---@return number
+function MathUtil.getCircularArea(radius)
+    return math.pi * radius ^ 2
+end
 
---function MathUtil.randomGaussian(mean, variance)
---    return math.sqrt(-2 * variance * math.log(math.random())) * math.cos(2 * math.pi * math.random()) + mean
---end
+---Calculates circular area with given `diameter`.
+---@param diameter number
+---@return number
+function MathUtil.getCircularAreaD(diameter)
+    return 0.25 * math.pi * diameter ^ 2
+end
 
 return MathUtil

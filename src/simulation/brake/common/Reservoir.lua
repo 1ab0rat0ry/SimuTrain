@@ -1,103 +1,162 @@
---Adapted from: https://github.com/mspielberg/dv-airbrake
---Original author: mspielberg
+local ATM_PRESSURE = 101325
+--properties of air
+local SPECIFIC_GAS_CONSTANT = 287.052874247
+local HEAT_RATIO = 1.4
+local HEAT_RATIO_INC = HEAT_RATIO + 1
+local HEAT_RATIO_DEC = HEAT_RATIO - 1
+local CRITICAL_PRESSURE_RATIO = (2 / HEAT_RATIO_INC) ^ (HEAT_RATIO / HEAT_RATIO_DEC)
 
----@type MathUtil
-local MathUtil = require "Assets/1ab0rat0ry/RWLab/utils/math/MathUtil.out"
-
+---Represents reservoir containing air.
 ---@class Reservoir
+---@field protected capacity number
 ---@field public pressure number
----@field public capacity number
-local Reservoir = {
-    pressure = 0,
-    capacity = 0
-}
+---@field protected temperature number
+local Reservoir = {}
 Reservoir.__index = Reservoir
 
----@param capacity number
----@param pressure number
+---@overload fun(capacity: number): Reservoir
+---@param capacity number Capacity of reservoir `[m ^ 3]`.
+---@param pressure number Reservoir initial pressure `[Pa]`.
 ---@return Reservoir
 function Reservoir:new(capacity, pressure)
     ---@type Reservoir
-    local obj = {
+    local instance = {
         capacity = capacity,
-        pressure = pressure or 0
+        pressure = pressure or ATM_PRESSURE,
+        temperature = 273.15
     }
-    obj = setmetatable(obj, self)
+    instance = setmetatable(instance, self)
 
-    return obj
+    return instance
 end
 
----Changes pressure in reservoir based on volumetric flow.
----@protected
----@param flow number
----@param minPressure number
----@param maxPressure number
-function Reservoir:changePressure(flow, minPressure, maxPressure)
-    -- self.pressure = MathUtil.clamp(self.pressure + flow / self.capacity, minPressure, maxPressure)
-    self.pressure = self.pressure + flow / self.capacity
-end
-
----Handles volume transfer between reservoirs.
----@private
+---Equalizes pressure between reservoirs.
 ---@param reservoir Reservoir
----@param maxFlow number
-function Reservoir:transferVolume(reservoir, maxFlow)
+---@param area number
+---@param deltaTime number
+function Reservoir:equalize(reservoir, area, deltaTime)
+    local inletRes, outletRes = reservoir, self
+
     if self.pressure > reservoir.pressure then
-        reservoir:transferVolume(self, maxFlow)
-        return
+        inletRes = self
+        outletRes = reservoir
     end
 
-    local capacitySum = self.capacity + reservoir.capacity
-    local equilibriumPressure = (self:getVolume() + reservoir:getVolume()) / capacitySum
-    local volumeToTransfer = (equilibriumPressure - self.pressure) * self.capacity
-    local flow = MathUtil.clamp(volumeToTransfer, -maxFlow, maxFlow)
+    local massFlowRate = self:getMassFlowRate(inletRes.pressure, inletRes.temperature, outletRes.pressure, area)
+    local capacitySum = inletRes.capacity + outletRes.capacity
+    local avgPressure = (inletRes:getVolume() + outletRes:getVolume()) / capacitySum
+    local targetMass = inletRes:getDensity(avgPressure) * inletRes.capacity
+    local maxMassChange = inletRes:getMass() - targetMass
+    local massChange = massFlowRate * deltaTime
+    local actualMassChange = math.min(massChange, maxMassChange)
 
-    self:changePressure(flow, self.pressure, equilibriumPressure)
-    reservoir:changePressure(-flow, equilibriumPressure, reservoir.pressure)
+    if inletRes.massFlow ~= nil then inletRes.massFlow = inletRes.massFlow - massFlowRate
+    else inletRes:changeMass(-actualMassChange)
+    end
+
+    if outletRes.massFlow ~= nil then outletRes.massFlow = outletRes.massFlow + massFlowRate
+    else outletRes:changeMass(actualMassChange)
+    end
 end
 
----Equalizes pressure in two reservoirs.
----@param reservoir Reservoir
+---Vents pressure from reservoir into atmosphere.
+---@param area number
 ---@param deltaTime number
----@param maxPressureChangeRate number
----@param flowCoef number
-function Reservoir:equalize(reservoir, deltaTime, flowCoef, maxPressureChangeRate)
-    flowCoef = flowCoef or 1
-    maxPressureChangeRate = maxPressureChangeRate or 1e10
+function Reservoir:vent(area, deltaTime)
+    if self.pressure < ATM_PRESSURE then return end
 
-    local pressureCoef = math.sqrt(math.abs(self.pressure - reservoir.pressure))
-    local maxFlow = self.capacity * maxPressureChangeRate
-    local flow = pressureCoef * flowCoef
+    local massFlowRate = self:getMassFlowRate(self.pressure, self.temperature, ATM_PRESSURE, area)
+    local targetMass = self:getDensity(ATM_PRESSURE) * self.capacity
+    local maxMassChange = self:getMass() - targetMass
+    local massChange = massFlowRate * deltaTime
+    local actualMassChange = math.min(massChange, maxMassChange)
 
-    flow = math.min(flow, maxFlow) * deltaTime
-    self:transferVolume(reservoir, flow)
+    if self.massFlow ~= nil then self.massFlow = self.massFlow - massFlowRate
+    else self:changeMass(-actualMassChange)
+    end
 end
 
----Fills reservoir on which it is called from `source`.
----@param source Reservoir
----@param deltaTime number
----@param maxPressureChangeRate number
----@param flowMultiplier number
-function Reservoir:fillFrom(source, deltaTime, flowCoef, maxPressureChangeRate)
-    if source.pressure <= self.pressure then return end
-    self:equalize(source, deltaTime, flowCoef, maxPressureChangeRate)
+---@private
+---@param inletPressure number
+---@param inletTemp number
+---@param outletPressure number
+---@param area number
+---@return number
+function Reservoir:getMassFlowRate(inletPressure, inletTemp, outletPressure, area)
+    local pressureRatio = outletPressure / inletPressure
+    local baseComponent = area * inletPressure / math.sqrt(inletTemp)
+    local correctionCoefM = self:getCorrectionCoefM(pressureRatio)
+    local correctionCoefQ = self:getCorrectionCoefQ(pressureRatio)
+
+    return baseComponent * correctionCoefM * correctionCoefQ
 end
 
----Empties reservoir.
----@param deltaTime number
----@param maxPressureChangeRate number
----@param flowMultiplier number
-function Reservoir:vent(deltaTime, flowCoef, maxPressureChangeRate)
-    self.atmosphere.pressure = 0
-    self:equalize(self.atmosphere, deltaTime, flowCoef, maxPressureChangeRate)
+---@private
+---@param pressureRatio number
+---@return number
+function Reservoir:getCorrectionCoefM(pressureRatio)
+    if pressureRatio > CRITICAL_PRESSURE_RATIO then
+        --subsonic flow
+        local component1 = math.sqrt(2 * HEAT_RATIO / (SPECIFIC_GAS_CONSTANT * HEAT_RATIO_DEC))
+        local component2 = pressureRatio ^ (2 / HEAT_RATIO)
+        local component3 = pressureRatio ^ (HEAT_RATIO_INC / HEAT_RATIO)
+
+        return component1 * math.sqrt(component2 - component3)
+    end
+
+    --supersonic flow
+    return math.sqrt(HEAT_RATIO / SPECIFIC_GAS_CONSTANT * (2 / HEAT_RATIO_INC) ^ (HEAT_RATIO_INC / HEAT_RATIO_DEC))
 end
 
----Gets volume of air in reservoir.
+---@private
+---@param pressureRatio number
+---@return number
+function Reservoir:getCorrectionCoefQ(pressureRatio)
+    return 0.8414 - 0.1002 * pressureRatio + 0.8415 * pressureRatio ^ 2 - 3.9 * pressureRatio ^ 3 + 4.6001 * pressureRatio ^ 4 - 1.6827 * pressureRatio ^ 5
+end
+
+--- - source: [https://en.wikipedia.org/wiki/Viscosity#Air](https://en.wikipedia.org/wiki/Viscosity#Air)
+---@return number
+function Reservoir:getDynamicViscosity()
+    return 2.791 * 10 ^ -7 * self.temperature ^ 0.7355
+end
+
+---@param massChange number
+function Reservoir:changeMass(massChange)
+    self.pressure = self.pressure + massChange * SPECIFIC_GAS_CONSTANT * self.temperature / self.capacity
+end
+
+---Get reservoir pressure as displayed on manometer.
+---@return number Manometer pressure `[bar]`.
+function Reservoir:getManoPressure()
+    return math.max(0, self.pressure - ATM_PRESSURE) * 1e-5
+end
+
+---Get mass of gas in reservoir.
+---@return number
+function Reservoir:getMass()
+    return self:getDensity() * self.capacity
+end
+
+---Get volume of gas in reservoir.
 ---@return number
 function Reservoir:getVolume()
     return self.pressure * self.capacity
 end
 
-Reservoir.atmosphere = Reservoir:new(1e10)
+---Get density of gas in reservoir.
+---@overload fun(): number
+---@param pressure number
+function Reservoir:getDensity(pressure)
+    return (pressure or self.pressure) / (SPECIFIC_GAS_CONSTANT * self.temperature)
+end
+
+---Set pressure according to new density.
+---@param density number
+function Reservoir:setDensity(density)
+    self.pressure = density * SPECIFIC_GAS_CONSTANT * self.temperature
+end
+
+Reservoir.atmosphere = Reservoir:new(1e3)
 
 return Reservoir

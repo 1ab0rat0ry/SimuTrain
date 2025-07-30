@@ -1,5 +1,5 @@
 ---@type MathUtil
-local MathUtil = require "Assets/1ab0rat0ry/RWLab/utils/math/MathUtil.out"
+local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.out"
 
 ---@class Easings
 local Easings = {}
@@ -105,11 +105,5 @@ function Easings.elasticOut(factor)
     factor = MathUtil.clamp(factor, 0, 1)
     return 2 ^ (-10 * factor) * math.sin(math.pi * (6 * factor - 0.5)) + 1
 end
-
--- function Easings.ElasticOut:ease(old, new, duration, time)
---     local factor = MathUtil.clamp(time / duration, 0, 1)
---     local animation = 2 ^ (-10 * factor) * math.sin(math.pi * (self.frequency * factor - 0.5)) + 1
---     return animation * (new - old) + old
--- end
 
 return Easings
