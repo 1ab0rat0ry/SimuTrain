@@ -56,10 +56,8 @@ function Vehicle:new(length)
         controlRes = nil,
         cylinder = nil
     }
-    instance = setmetatable(instance, self)
-    instance.brakePipe.pressure = 601325
 
-    return instance
+    return setmetatable(instance, self)
 end
 
 ---Updates all systems and devices of vehicle.

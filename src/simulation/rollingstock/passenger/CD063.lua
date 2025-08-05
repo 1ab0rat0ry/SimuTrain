@@ -21,8 +21,8 @@ function Cd063:new()
     ---@type Cd063
     local instance = Vehicle:new(LENGTH)
 
-    instance.distributorRes = Reservoir:new(DISTRIBUTOR_RES_CAPACITY, 601325)
-    instance.auxiliaryRes = Reservoir:new(AUXILIARY_RES_CAPACITY, 601325)
+    instance.distributorRes = Reservoir:new(DISTRIBUTOR_RES_CAPACITY)
+    instance.auxiliaryRes = Reservoir:new(AUXILIARY_RES_CAPACITY)
     instance.cylinder = Cylinder:new(16, 700, 0.15, 0.2, 0.001)
     instance:addFeedPipe()
     instance:addDistributor(DakoBv1:new(instance.brakePipe, instance.distributorRes, instance.auxiliaryRes, instance.cylinder))

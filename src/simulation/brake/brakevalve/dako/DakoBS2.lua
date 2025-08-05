@@ -47,10 +47,8 @@ function DistributorValve:new()
     local instance = {
         controlChamber = Reservoir:new(0.0003)
     }
-    instance = setmetatable(instance, self)
-    instance.controlChamber.pressure = 601325
 
-    return instance
+    return setmetatable(instance, self)
 end
 
 ---Updates position accordingly to pressure in control chamber and overcharge reservoir.
@@ -67,7 +65,6 @@ function DistributorValve:update(deltaTime, brakePipe, overchargePressure)
     elseif positionDelta > DIST_VALVE_HYSTERESIS then
         self.resistance = math.max(self.MIN_RESISTANCE, self.resistance - positionDelta * deltaTime)
     end
-    --Call("SetControlValue", "PositionTarget", 0, positionTarget)
 
     if math.abs(self.position) < DIST_VALVE_HYSTERESIS and math.abs(positionTarget) < DIST_VALVE_HYSTERESIS then
         self.position = MathUtil.towards(self.position, 0, deltaTime)
@@ -137,7 +134,6 @@ function DakoBs2:new(notches)
     instance.ranges.SERVICE = instance.notches.MAX_REDUCTION + (instance.notches.CUTOFF - instance.notches.MAX_REDUCTION) / 2
     instance.ranges.CUTOFF = instance.notches.CUTOFF + (instance.notches.EMERGENCY - instance.notches.CUTOFF) / 2
     instance.ranges.EMERGENCY = instance.notches.EMERGENCY
-    instance.controlRes.pressure = 601325
 
     return instance
 end
