@@ -33,7 +33,7 @@ local CYLINDER_EMPTY_CHOKE = MathUtil.getCircularAreaD(0.006)
 ---@field private accelerationChamber Reservoir
 ---@field private distributorRes Reservoir
 ---@field private auxiliaryRes Reservoir
----@field private outputRes Reservoir
+---@field private outputRes Cylinder
 local DakoBv1 = {}
 DakoBv1.__index = DakoBv1
 
@@ -124,6 +124,7 @@ function DakoBv1:updateDistributorMechanism(deltaTime)
     elseif self.distributorValve.position < 0 then
         self.outputRes:vent(CYLINDER_EMPTY_CHOKE * math.abs(self.distributorValve.position), deltaTime)
     end
+    self.outputRes:update(deltaTime)
 end
 
 return DakoBv1

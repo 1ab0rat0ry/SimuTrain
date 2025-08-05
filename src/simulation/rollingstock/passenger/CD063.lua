@@ -12,7 +12,6 @@ local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.ou
 local LENGTH = 24.5
 local DISTRIBUTOR_RES_CAPACITY = 0.009
 local AUXILIARY_RES_CAPACITY = 0.1
-local CYLINDER_PISTON_AREA = MathUtil.getCircularAreaD(0.4064)
 
 ---@class Cd063: Vehicle
 local Cd063 = {}
@@ -24,7 +23,7 @@ function Cd063:new()
 
     instance.distributorRes = Reservoir:new(DISTRIBUTOR_RES_CAPACITY, 601325)
     instance.auxiliaryRes = Reservoir:new(AUXILIARY_RES_CAPACITY, 601325)
-    instance.cylinder = Cylinder:new(CYLINDER_PISTON_AREA, 315000, 2157, 100, 0.2, 0.001)
+    instance.cylinder = Cylinder:new(16, 700, 0.15, 0.2, 0.001)
     instance:addFeedPipe()
     instance:addDistributor(DakoBv1:new(instance.brakePipe, instance.distributorRes, instance.auxiliaryRes, instance.cylinder))
 

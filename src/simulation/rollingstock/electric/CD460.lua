@@ -15,7 +15,6 @@ local LENGTH = 24.5
 local MAIN_RES_CAPACITY = 0.4
 local DISTRIBUTOR_RES_CAPACITY = 0.009
 local AUXILIARY_RES_CAPACITY = 0.1
-local CYLINDER_PISTON_AREA = MathUtil.getCircularAreaD(0.4064)
 local BS2_NOTCHES = {
     RELEASE = 0,
     RUNNING = 0.1,
@@ -36,7 +35,7 @@ function Cd460:new()
 
     instance.distributorRes = Reservoir:new(DISTRIBUTOR_RES_CAPACITY, 601325)
     instance.auxiliaryRes = Reservoir:new(AUXILIARY_RES_CAPACITY, 601325)
-    instance.cylinder = Cylinder:new(CYLINDER_PISTON_AREA, 315000, 2157, 100, 0.2, 0.001)
+    instance.cylinder = Cylinder:new(16, 700, 0.15, 0.2, 0.001)
     instance:addFeedPipe(MAIN_RES_CAPACITY)
     instance:addDistributor(DakoBv1:new(instance.brakePipe, instance.distributorRes, instance.auxiliaryRes, instance.cylinder))
     instance:addBrakeValve(DakoBs2:new(BS2_NOTCHES))
