@@ -6,23 +6,24 @@ local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.ou
 local REFERENCE_PRESSURE = 5
 local MIN_REDUCTION_PRESSURE_DROP = 0.3
 local MAX_REDUCTION_PRESSURE_DROP = 2
-local FULL_SERVICE_PRESSURE_DROP = 1.5
+--local FULL_SERVICE_PRESSURE_DROP = 1.5
 
 local CONTROL_RES_CAPACITY = 0.001
-local CONTROL_RES_CHANGE_TIME = 3
-local CONTROL_RES_CHANGE_RATE = FULL_SERVICE_PRESSURE_DROP / CONTROL_RES_CHANGE_TIME
+--local CONTROL_RES_CHANGE_TIME = 3
+--local CONTROL_RES_CHANGE_RATE = FULL_SERVICE_PRESSURE_DROP / CONTROL_RES_CHANGE_TIME
 
-local OVERCHARGE_PRESSURE = 5.4
+local OVERCHARGE_PRESSURE = 540000 --[Pa]
 local OVERCHGARGE_RES_CAPACITY = 0.005
-local OVERCHARGE_RES_FILL_TIME = 8
-local OVERCHARGE_RES_FILL_RATE = OVERCHARGE_PRESSURE / OVERCHARGE_RES_FILL_TIME
-local OVERCHARGE_RES_EMPTY_RATE = 0.03
+--local OVERCHARGE_RES_FILL_TIME = 8
+--local OVERCHARGE_RES_FILL_RATE = OVERCHARGE_PRESSURE / OVERCHARGE_RES_FILL_TIME
+local OVERCHARGE_RES_EMPTY_TIME = 180 --[s]
+local OVERCHARGE_RES_EMPTY_RATE = OVERCHARGE_PRESSURE / OVERCHARGE_RES_EMPTY_TIME --[Pa/s]
 
 local DIST_VALVE_HYSTERESIS = 0.01
 
 local FILL_CHOKE = 1e-4
 local EMPTY_CHOKE = 1e-4
-local EMERGENCY_CHOKE = 3e-4
+local EMERGENCY_CHOKE = 2.85e-4
 
 ---Regulates pressure in brake pipe based on the pressure in control chamber.
 ---@class DistributorValve
@@ -30,7 +31,6 @@ local EMERGENCY_CHOKE = 3e-4
 ---@field private resistance number
 ---@field public position number
 ---@field public controlChamber Reservoir
----@field private average MovingAverage
 local DistributorValve = {
     MAX_RESISTANCE = 0.1,
     MIN_RESISTANCE = 0.001,
@@ -235,11 +235,11 @@ end
 ---@param feedPipe Reservoir
 ---@param brakePipe Reservoir
 function DakoBs2:updateOvercharge(deltaTime, feedPipe, brakePipe)
-    if self.overchargeRes:getManoPressure() > 0 then self.overchargeRes:vent(0.5e-6, deltaTime) end
+    if self.overchargeRes:getManoPressure() > 0 then self.overchargeRes.pressure = self.overchargeRes.pressure - OVERCHARGE_RES_EMPTY_RATE * deltaTime end
     if self.distributorValve.controlChamber:getManoPressure() > 5.1 and self.distributorValve.position > 0.3 then
-        self.overchargeRes:equalize(feedPipe, 1e-6, deltaTime)
+        self.overchargeRes:equalize(feedPipe, 1.5e-6, deltaTime)
     elseif self.hasOvercharge and Call("GetControlValue", "Overcharge", 0) > 0.5 then
-        self.overchargeRes:equalize(brakePipe, 1e-6, deltaTime)
+        self.overchargeRes:equalize(brakePipe, 1.5e-6, deltaTime)
     end
 end
 
