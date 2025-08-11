@@ -2,6 +2,8 @@
 local Reservoir = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/common/Reservoir.out"
 ---@type MathUtil
 local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.out"
+---@type Easings
+local Easings = require "Assets/1ab0rat0ry/SimuTrain/src/utils/Easings.out"
 
 local ATM_PRESSURE = 101325
 local SPECIFIC_GAS_CONSTANT = 287.052874247
@@ -14,7 +16,7 @@ local SPECIFIC_GAS_CONSTANT = 287.052874247
 ---@field private extensionForContact number Piston travel at which brake blocks make contact with wheel `[m]`
 ---@field private maxExtension number Maximum piston travel limit
 ---@field private additionalCapacity number Additional volume `[m³]`
----@field private position number Current piston travel `[m]`
+---@field private extension number Current piston travel `[m]`
 ---@field private massChange number
 local Cylinder = {}
 Cylinder.__index = Cylinder
@@ -43,7 +45,7 @@ function Cylinder:new(size, friction, extensionForContact, maxExtension, additio
         extensionForContact = extensionForContact,
         maxExtension = maxExtension,
         additionalCapacity = additionalCapacity or 0.000001,
-        position = 0,
+        extension = 0,
         massChange = 0
     }
 
@@ -52,8 +54,8 @@ end
 
 ---@param deltaTime number
 function Cylinder:update(deltaTime)
-    local totalStiffness = self:getMechanismStiffness()
-    local force = (self.pressure - ATM_PRESSURE) * self.area - totalStiffness * self.position - self.springPreload
+    local totalStiffness = self:getTotalStiffness()
+    local force = self:getForce()
 
     self.pressure = self.pressure + self.massChange * SPECIFIC_GAS_CONSTANT * self.temperature / self.capacity
     self.massChange = 0
@@ -62,30 +64,40 @@ function Cylinder:update(deltaTime)
 
     local actualForce = force - self.friction * MathUtil.sign(force)
     local moveSpeed = MathUtil.clamp(actualForce / totalStiffness, -0.2, 0.2)
-    local newPosition = self.position + moveSpeed * deltaTime
-    local newCapacity = self.additionalCapacity + self.area * newPosition
+    local newExtension = self.extension + moveSpeed * deltaTime
+    local newCapacity = self.additionalCapacity + self.area * newExtension
 
     self.capacity = newCapacity
-    self.position = MathUtil.clamp(newPosition, 0, self.maxExtension)
+    self.extension = MathUtil.clamp(newExtension, 0, self.maxExtension)
 end
 
 function Cylinder:changeMass(massChange)
     self.massChange = self.massChange + massChange
 end
 
+---@return number
+function Cylinder:getForce()
+    return self.area * (self.pressure - ATM_PRESSURE) - self.springStiffness * self.extension - self.springPreload
+end
+
 ---@private
-function Cylinder:getMechanismStiffness()
-    return self.springStiffness + MathUtil.inverseLerp(self.position, self.extensionForContact, self.extensionForContact + 0.01) * 2e6
+---@return number
+function Cylinder:getTotalStiffness()
+    local riggingStiffness = Easings.sineIn((self.extension - self.extensionForContact) / 0.01) * 2e6
+
+    return self.springStiffness + riggingStiffness
 end
 
 ---@private
 ---@param size number
+---@return number
 function Cylinder.getSpringStiffness(size)
     return 45.7 * size ^ 2
 end
 
 ---@private
 ---@param size number
+---@return number
 function Cylinder.getSpringPreload(size)
     return 4.43643 * size + 6.53003 * size ^ 2 + 417.37363
 end
