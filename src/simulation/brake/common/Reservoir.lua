@@ -1,4 +1,5 @@
 local ATM_PRESSURE = 101325
+local NORMAL_TEMP = 273.15
 --properties of air
 local SPECIFIC_GAS_CONSTANT = 287.052874247
 local HEAT_RATIO = 1.4
@@ -23,7 +24,7 @@ function Reservoir:new(capacity, pressure)
     local instance = {
         capacity = capacity,
         pressure = pressure or ATM_PRESSURE,
-        temperature = 273.15
+        temperature = NORMAL_TEMP
     }
     instance = setmetatable(instance, self)
 
@@ -45,7 +46,7 @@ function Reservoir:equalize(reservoir, area, deltaTime)
     local massFlowRate = self:getMassFlowRate(inletRes.pressure, inletRes.temperature, outletRes.pressure, area)
     local capacitySum = inletRes.capacity + outletRes.capacity
     local avgPressure = (inletRes:getVolume() + outletRes:getVolume()) / capacitySum
-    local targetMass = inletRes:getDensity(avgPressure) * inletRes.capacity
+    local targetMass = inletRes.getDensityFrom(avgPressure, NORMAL_TEMP) * inletRes.capacity
     local maxMassChange = inletRes:getMass() - targetMass
     local massChange = massFlowRate * deltaTime
     local actualMassChange = math.min(massChange, maxMassChange)
@@ -66,7 +67,7 @@ function Reservoir:vent(area, deltaTime)
     if self.pressure < ATM_PRESSURE then return end
 
     local massFlowRate = self:getMassFlowRate(self.pressure, self.temperature, ATM_PRESSURE, area)
-    local targetMass = self:getDensity(ATM_PRESSURE) * self.capacity
+    local targetMass = self.getDensityFrom(ATM_PRESSURE, NORMAL_TEMP) * self.capacity
     local maxMassChange = self:getMass() - targetMass
     local massChange = massFlowRate * deltaTime
     local actualMassChange = math.min(massChange, maxMassChange)
@@ -145,16 +146,20 @@ function Reservoir:getVolume()
 end
 
 ---Get density of gas in reservoir.
----@overload fun(): number
----@param pressure number
-function Reservoir:getDensity(pressure)
-    return (pressure or self.pressure) / (SPECIFIC_GAS_CONSTANT * self.temperature)
+function Reservoir:getDensity()
+    return self.pressure / (SPECIFIC_GAS_CONSTANT * self.temperature)
 end
 
 ---Set pressure according to new density.
 ---@param density number
 function Reservoir:setDensity(density)
     self.pressure = density * SPECIFIC_GAS_CONSTANT * self.temperature
+end
+
+---@param pressure number
+---@param temperature number
+function Reservoir.getDensityFrom(pressure, temperature)
+    return pressure / (SPECIFIC_GAS_CONSTANT * temperature)
 end
 
 Reservoir.atmosphere = Reservoir:new(1e3)

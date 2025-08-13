@@ -1,8 +1,12 @@
 ---@type Reservoir
 local Reservoir = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/common/Reservoir.out"
 
+local NORMAL_TEMP = 273.15
 local ATM_PRESSURE = 101325
+local ATM_DENSITY = Reservoir.getDensityFrom(ATM_PRESSURE, NORMAL_TEMP)
+
 local MIN_TIME_STEP = 0.04
+
 
 ---@class Pipe: Reservoir
 ---@field private velocity number
@@ -11,8 +15,10 @@ local MIN_TIME_STEP = 0.04
 ---@field private area number
 ---@field private frontCockOpen boolean
 ---@field private rearCockOpen boolean
----@field private previous Pipe
----@field private next Pipe
+---@field private frontPipe Pipe
+---@field private rearPipe Pipe
+---@field private front Pipe
+---@field private rear Pipe
 ---@field private massFlow number
 local Pipe = {}
 Pipe.__index = Pipe
@@ -23,7 +29,7 @@ function Pipe:new(length, diameter)
     local instance = {
         capacity = 0,
         pressure = ATM_PRESSURE,
-        temperature = 273.15,
+        temperature = NORMAL_TEMP,
 
         velocity = 0,
         length = length,
@@ -32,8 +38,10 @@ function Pipe:new(length, diameter)
 
         frontCockOpen = false,
         rearCockOpen = false,
-        previous = nil,
-        next = nil,
+        frontPipe = nil,
+        rearPipe = nil,
+        front = {},
+        rear = {},
 
         massFlow = 0
     }
@@ -50,6 +58,7 @@ function Pipe:update(deltaTime)
     local fixedDeltaTime = deltaTime / steps
 
     for _ = 1, steps do
+        self:updateNeighbours()
         self:calcDensity(fixedDeltaTime)
         self:calcVelocity(fixedDeltaTime)
     end
@@ -57,34 +66,17 @@ function Pipe:update(deltaTime)
     self.massFlow = 0
 end
 
---TODO add boundary conditions for open end
 ---Calculates velocity change in time using momentum equation.
 --- - source: *Freight train air brake models*, equation 38
 --- - available at: [https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808](https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808)
 ---@param deltaTime number
 function Pipe:calcVelocity(deltaTime)
     local accel = self.velocity * self.massFlow / self:getMass()
+    local dx = 0.5 * (self.front.length + self.rear.length) + self.length
+    local velocityDx = (self.rear.velocity - self.front.velocity) / dx
+    local pressureDx = (self.rear.pressure - self.front.pressure) / dx
 
-    if self.previous and self.next then
-        local dx = 0.5 * (self.previous.length + self.next.length) + self.length
-        local velocityDx = (self.next.velocity - self.previous.velocity) / dx
-        local pressureDx = (self.next.pressure - self.previous.pressure) / dx
-
-        accel = accel - pressureDx / self:getDensity() - self.velocity * velocityDx
-    elseif self.previous then
-        local dx = 0.5 * self.previous.length + 1.5 * self.length
-        local velocityDx = (-self.velocity - self.previous.velocity) / dx
-        local pressureDx = (self.pressure - self.previous.pressure) / dx
-
-        accel = accel - pressureDx / self:getDensity() - self.velocity * velocityDx
-    elseif self.next then
-        local dx = 1.5 * self.length + 0.5 * self.next.length
-        local velocityDx = (self.next.velocity - -self.velocity) / dx
-        local pressureDx = (self.next.pressure - self.pressure) / dx
-
-        accel = accel - pressureDx / self:getDensity() - self.velocity * velocityDx
-    end
-
+    accel = accel - pressureDx / self:getDensity() - self.velocity * velocityDx
     self.velocity = self.velocity + (accel + self:getResistance()) * deltaTime
 end
 
@@ -94,28 +86,58 @@ end
 ---@param deltaTime number
 function Pipe:calcDensity(deltaTime)
     local densityDt = self.massFlow / self.capacity
+    local dx = 0.5 * (self.front.length + self.rear.length) + self.length
+    local velocityDx = (self.rear.velocity - self.front.velocity) / dx
+    local densityDx = (self.rear.density - self.front.density) / dx
 
-    if self.previous and self.next then
-        local dx = 0.5 * (self.previous.length + self.next.length) + self.length
-        local velocityDx = (self.next.velocity - self.previous.velocity) / dx
-        local densityDx = (self.next:getDensity() - self.previous:getDensity()) / dx
+    densityDt = densityDt - self.velocity * densityDx - self:getDensity() * velocityDx
+    self:setDensity(self:getDensity() + densityDt * deltaTime)
+end
 
-        densityDt = densityDt - self.velocity * densityDx - self:getDensity() * velocityDx
-    elseif self.previous then
-        local dx = 0.5 * self.previous.length + 1.5 * self.length
-        local velocityDx = (-self.velocity - self.previous.velocity) / dx
-        local densityDx = (self:getDensity() - self.previous:getDensity()) / dx
-
-        densityDt = densityDt - self.velocity * densityDx - self:getDensity() * velocityDx
-    elseif self.next then
-        local dx = 1.5 * self.length + 0.5 * self.next.length
-        local velocityDx = (self.next.velocity - -self.velocity) / dx
-        local densityDx = (self.next:getDensity() - self:getDensity()) / dx
-
-        densityDt = densityDt - self.velocity * densityDx - self:getDensity() * velocityDx
+---Handles boundary conditions (closed end, open end) for the pipe segment.
+function Pipe:updateNeighbours()
+    if self.frontPipe and self.frontCockOpen then
+        --- Connected to another pipe and cock is open we can use neighbour's state.
+        self.front.length = self.frontPipe.length
+        self.front.pressure = self.frontPipe.pressure
+        self.front.velocity = self.frontPipe.velocity
+        self.front.density = self.frontPipe:getDensity()
+    elseif self.frontCockOpen then
+        --- Opened end boundary condition (no pipe connected, end of pipe is opened to atmosphere).
+        --- We use virtual atmospheric segment with extrapolated pressure therefore pressure
+        --- at the pipe boundary will be equal to atmospheric pressure and we get correct
+        --- acceleration due to pressure gradient. Density is set to atmospheric density
+        --- for correct flow calculation.
+        self.front.length = self.length
+        self.front.pressure = 2 * ATM_PRESSURE - self.pressure
+        self.front.velocity = self.velocity
+        self.front.density = ATM_DENSITY
+    else
+        --- Closed end boundary condition. Again we use virtual segment with pressure equal
+        --- to the last segment's pressure and velocity has opposite sign for correct wave reflection.
+        self.front.length = self.length
+        self.front.pressure = self.pressure
+        self.front.velocity = -self.velocity
+        self.front.density = self:getDensity()
     end
 
-    self:setDensity(self:getDensity() + densityDt * deltaTime)
+    --- Same logic as above but for the rear end of pipe.
+    if self.rearPipe and self.rearCockOpen then
+        self.rear.length = self.rearPipe.length
+        self.rear.pressure = self.rearPipe.pressure
+        self.rear.velocity = self.rearPipe.velocity
+        self.rear.density = self.rearPipe:getDensity()
+    elseif self.rearCockOpen then
+        self.rear.length = self.length
+        self.rear.pressure = 2 * ATM_PRESSURE - self.pressure
+        self.rear.velocity = self.velocity
+        self.rear.density = ATM_DENSITY
+    else
+        self.rear.length = self.length
+        self.rear.pressure = self.pressure
+        self.rear.velocity = -self.velocity
+        self.rear.density = self:getDensity()
+    end
 end
 
 ---Calculates resistance due to friction.
@@ -154,22 +176,22 @@ function Pipe:getReynoldsNumber()
     return self:getDensity() * math.abs(self.velocity) * self.diameter / self:getDynamicViscosity()
 end
 
----@param previous Pipe
-function Pipe:setPrevious(previous)
-    self.previous = previous
+---@param front Pipe
+function Pipe:setFront(front)
+    self.frontPipe = front
     self.frontCockOpen = true
 
-    previous.next = self
-    previous.rearCockOpen = true
+    front.rearPipe = self
+    front.rearCockOpen = true
 end
 
----@param next Pipe
-function Pipe:setNext(next)
-    self.next = next
+---@param rear Pipe
+function Pipe:setRear(rear)
+    self.rearPipe = rear
     self.rearCockOpen = true
 
-    next.previous = self
-    next.frontCockOpen = true
+    rear.frontPipe = self
+    rear.frontCockOpen = true
 end
 
 ---@param massChange number

@@ -1,7 +1,7 @@
 ---@type ArrayList
 local ArrayList = require "Assets/1ab0rat0ry/SimuTrain/src/utils/ArrayList.out"
 
-local MIN_TIME_STEP = 0.04
+--local MIN_TIME_STEP = 0.04
 
 ---@class Consist
 ---@field public length number
@@ -31,7 +31,7 @@ end
 ---@param vehicle Vehicle
 function Consist:addVehicle(vehicle)
     if self.vehicleCount > 0 then
-        self.vehicles.elements[self.vehicleCount].brakePipe:setNext(vehicle.brakePipe)
+        self.vehicles.elements[self.vehicleCount].brakePipe:setRear(vehicle.brakePipe)
     end
     self.vehicleCount = self.vehicleCount + 1
     self.vehicles:add(vehicle)
@@ -40,7 +40,7 @@ end
 ---Updates all vehicles in consist and propagates brake pipe.
 ---@param deltaTime number
 function Consist:update(deltaTime)
-    local time = 0
+    --local time = 0
 
 
     --while time < deltaTime do
