@@ -188,4 +188,18 @@ function MathUtil.round(value, places)
     return math.floor(value * factor + 0.5) / factor
 end
 
+---Calculates circular area with given `radius`.
+---@param radius number
+---@return number
+function MathUtil.getCircularArea(radius)
+    return math.pi * radius ^ 2
+end
+
+---Calculates circular area with given `diameter`.
+---@param diameter number
+---@return number
+function MathUtil.getCircularAreaD(diameter)
+    return 0.25 * math.pi * diameter ^ 2
+end
+
 return MathUtil

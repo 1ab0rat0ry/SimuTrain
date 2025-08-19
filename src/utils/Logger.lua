@@ -1,9 +1,12 @@
-local Logger = {}
+---@class Logger
+local Logger = {
+    log = true,
+    debug = true,
+    file = "CD460.log"
+}
 
-Logger.log = true
-Logger.debug = true
-Logger.file = "CD460.log"
-
+---@param log boolean
+---@param file string
 function Logger:new(log, file)
     local o = setmetatable({}, self)
     self.__index = self
@@ -12,9 +15,10 @@ function Logger:new(log, file)
     return o
 end
 
+---@param message string
 function Logger:info(message)
     if not self.log then return end
-    local file = assert(io.open(self.file, "a"))
+    local file = io.open(self.file, "a")
 
     file:write(message.."\n")
     file:close()
