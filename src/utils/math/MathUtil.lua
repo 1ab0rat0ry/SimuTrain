@@ -1,118 +1,147 @@
----@class MathUtil
+--- @class MathUtil
 local MathUtil = {}
 
 local INF = 1 / 0
 
----@param value number
----@return boolean true if `value` is NaN, false otherwise
-function MathUtil.isNan(value)
+--- Checks if the given value is NaN (not a number).
+--- @param value number The number to test.
+--- @return boolean True if `value` is NaN, false otherwise.
+function MathUtil.isNaN(value)
     -- NaN is the only value that is not equal to itself
     return value ~= value
 end
 
----@param value number
----@return boolean true if `value` is infinite, false otherwise
+--- Checks if the given value is infinite (positive or negative).
+--- @param value number The number to check.
+--- @return boolean True if value is either positive or negative infinity, false otherwise.
 function MathUtil.isInf(value)
     return value == INF or value == -INF
 end
 
----@param num number
----@param min number
----@param max number
----@return number between `min` inclusive and `max` inclusive
-function MathUtil.clamp(num, min, max)
-    if num < min then return min
-    elseif num > max then return max
+--- Clamps a number between a minimum and maximum value.
+--- If the number is less than `min`, returns `min`; if greater than `max`, returns `max`.
+--- Behavior is undefined if `min > max`.
+--- @param value number The number to clamp.
+--- @param min number Minimum value.
+--- @param max number Maximum value.
+--- @return number The clamped value.
+function MathUtil.clamp(value, min, max)
+    if value < min then return min
+    elseif value > max then return max
     end
 
-    return num
+    return value
 end
 
----@param num number
----@return number between `0` inclusive and `1` inclusive
-function MathUtil.clamp01(num)
-    if num < 0 then return 0
-    elseif num > 1 then return 1
+--- Clamps a number between 0 and 1.
+--- @param value number The number to clamp.
+--- @return number The clamped value between 0 and 1.
+function MathUtil.clamp01(value)
+    if value < 0 then return 0
+    elseif value > 1 then return 1
     end
 
-    return num
+    return value
 end
 
----@param num number between `0` inclusive and `1` inclusive
----@param min number
----@param max number
----@return number between `min` inclusive and `max` inclusive
-function MathUtil.lerp(num, min, max)
-    return min + (max - min) * MathUtil.clamp01(num)
+--- Performs a linear interpolation between `a` and `b` using a factor between 0 and 1.
+--- The interpolation factor is constrained to the 0, 1 range.
+--- @param factor number A value between 0 and 1.
+--- @param a number Starting value.
+--- @param b number Ending value.
+--- @return number The interpolated value.
+function MathUtil.lerp(factor, a, b)
+    return a + (b - a) * MathUtil.clamp01(factor)
 end
 
----@param num number
----@param min number
----@param max number
----@return number between `min` inclusive and `max` inclusive
-function MathUtil.lerpUnclamped(num, min, max)
-    return min + (max - min) * num
+--- Performs a linear interpolation between `a` and `b`.
+--- The interpolation is not constrained to the 0, 1 range.
+--- @param factor number Interpolation factor.
+--- @param a number Starting value.
+--- @param b number Ending value.
+--- @return number The interpolated value.
+function MathUtil.lerpUnclamped(factor, a, b)
+    return a + (b - a) * factor
 end
 
----@param num number
----@param min number
----@param max number
----@return number between 0 inclusive and 1 inclusive
-function MathUtil.inverseLerp(num, min, max)
-    if min == max then return 0 end
-    return MathUtil.clamp01((num - min) / (max - min))
+--- Computes the inverse linear interpolation of a number within a given range.
+--- This maps a number to a value between 0 and 1 based on its position between `a` and `b`.
+--- @param value number The number to map.
+--- @param a number Start of the input range.
+--- @param b number End of the input range.
+--- @return number The mapped value between 0 and 1.
+function MathUtil.inverseLerp(value, a, b)
+    if a == b then return 0 end
+
+    return MathUtil.clamp01((value - a) / (b - a))
 end
 
----Maps `num` from input range to output range.
----@param num number
----@param inMin number
----@param inMax number
----@param outMin number
----@param outMax number
----@return number
-function MathUtil.map(num, inMin, inMax, outMin, outMax)
-    if inMax == inMin then return outMin end
-    return outMin + (outMax - outMin) / (inMax - inMin) * (num - inMin)
+--- Maps a number from one range to another.
+--- Given an input range `inStart`, `inEnd` and an output range `outStart`, `outEnd`,
+--- this function returns the proportionally mapped value.
+--- @param value number The input number.
+--- @param inStart number Start of the input range.
+--- @param inEnd number End of the input range.
+--- @param outStart number Start of the output range.
+--- @param outEnd number End of the output range.
+--- @return number The number mapped to the output range.
+function MathUtil.map(value, inStart, inEnd, outStart, outEnd)
+    if inEnd == inStart then return outStart end
+
+    return outStart + (outEnd - outStart) / (inEnd - inStart) * (value - inStart)
 end
 
----Steps `num` towards `target` without overshooting it.
----@param num number
----@param target number
----@param step number
----@return number
-function MathUtil.towards(num, target, step)
-    if step <= 0 then return num end
-    if math.abs(target - num) <= step then return target end
+--- Changes the given number towards a target value without overshooting.
+--- @param value number Current value.
+--- @param target number The target number.
+--- @param step number The maximum change of `value` performed in one call. Must be positive.
+--- @return number The new value after change.
+function MathUtil.towards(value, target, step)
+    if step <= 0 then return value end
+    if math.abs(target - value) <= step then return target end
 
-    return num + MathUtil.sign(target - num) * step
+    return value + MathUtil.sign(target - value) * step
 end
 
----@param num number
----@param min number
----@param max number
-function MathUtil.smoothstep(num, min, max)
-    num = MathUtil.clamp01((num - min) / (max - min));
+--- Smoothly interpolates `value` based on the given `a` and `b`.
+--- 1st-order derivative is equal to 0 at boundaries.
+--- - source: [https://en.wikipedia.org/wiki/Smoothstep](https://en.wikipedia.org/wiki/Smoothstep)
+--- @param value number The input number.
+--- @param a number Start of the interpolation range.
+--- @param b number The upper bound of the interpolation range.
+--- @return number The interpolation result between 0 and 1.
+function MathUtil.smoothstep(value, a, b)
+    if a == b then return 0 end
+    value = MathUtil.clamp01((value - a) / (b - a));
 
-    return num * num * (3 - 2 * num);
+    return value * value * (3 - 2 * value);
 end
 
----@param num number
----@param min number
----@param max number
-function MathUtil.smootherstep(num, min, max)
-    num = MathUtil.clamp01((num - min) / (max - min));
+--- Provides a smoother interpolation than smoothstep.
+--- 1st- and 2nd-order derivatives are equal to 0 at boundaries.
+--- - source: [https://en.wikipedia.org/wiki/Smoothstep#Variations](https://en.wikipedia.org/wiki/Smoothstep#Variations)
+--- @param value number The input number.
+--- @param a number Start of the interpolation range.
+--- @param b number End of the interpolation range.
+--- @return number The interpolation result between 0 and 1.
+function MathUtil.smootherstep(value, a, b)
+    if a == b then return 0 end
+    value = MathUtil.clamp01((value - a) / (b - a));
 
-    return num * num * num * (num * (6 * num - 15) + 10);
+    return value * value * value * (value * (6 * value - 15) + 10);
 end
 
----Gradually changes value towards target using critical damping.
+--- Gradually changes a value towards a target using critical damping.
+--- Useful for smooth transitions without overshoot.
 --- - source: Game Programming Gems 4, page 99
----@param current number
----@param target number
----@param velocity number
----@param smoothTime number
----@param deltaTime number
----@param maxSpeed number
+--- @param current number The current value.
+--- @param target number The target value.
+--- @param velocity number The current velocity.
+--- @param smoothTime number The time over which to smooth. Determines how quickly the value approaches the target.
+--- @param deltaTime number The time step.
+--- @param maxSpeed number Maximum speed. Defaults to 1e10 if not provided.
+--- @return number, number The updated value, and velocity.
+--- @overload fun(current: number, target: number, velocity: number, smoothTime: number, deltaTime: number): number, number
 function MathUtil.smoothDamp(current, target, velocity, smoothTime, deltaTime, maxSpeed)
     if maxSpeed == nil then maxSpeed = 1e10 end
 
@@ -140,18 +169,23 @@ function MathUtil.smoothDamp(current, target, velocity, smoothTime, deltaTime, m
     return output, velocity
 end
 
----@param num number
----@return number for negative numbers `-1`, for zero `0`, for positive numbers `1`
-function MathUtil.sign(num)
-    return num > 0 and 1 or num < 0 and -1 or 0
+--- Returns the sign of a number.
+--- @param value number The number to evaluate.
+--- @return number If negative -1, if zero 0, if positive 1.
+function MathUtil.sign(value)
+    return value > 0 and 1 or value < 0 and -1 or 0
 end
 
----@param num number
----@param places number to which decimal place round `num`, leave empty or set to `0` for rounding to ones
----@return number rounded number
-function MathUtil.round(num, places)
+--- Rounds a number to a given number of decimal places.
+--- If places is omitted then number is rounded to the nearest integer.
+--- Halfway cases are rounded towards larger number.
+--- @param value number The number to round.
+--- @param places number Optional. The number of decimal places.
+--- @return number The rounded number.
+--- @overload fun(value: number): number
+function MathUtil.round(value, places)
     local factor = 10 ^ (places or 0)
-    return math.floor(num * factor + 0.5) / factor
+    return math.floor(value * factor + 0.5) / factor
 end
 
 return MathUtil
