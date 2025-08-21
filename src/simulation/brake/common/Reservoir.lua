@@ -38,6 +38,7 @@ end
 function Reservoir:equalize(reservoir, area, deltaTime)
     local inletRes, outletRes = reservoir, self
 
+    if area == 0 or deltaTime == 0 then return end
     if self.pressure > reservoir.pressure then
         inletRes = self
         outletRes = reservoir
@@ -51,13 +52,8 @@ function Reservoir:equalize(reservoir, area, deltaTime)
     local massChange = massFlowRate * deltaTime
     local actualMassChange = math.min(massChange, maxMassChange)
 
-    if inletRes.massFlow ~= nil then inletRes.massFlow = inletRes.massFlow - massFlowRate
-    else inletRes:changeMass(-actualMassChange)
-    end
-
-    if outletRes.massFlow ~= nil then outletRes.massFlow = outletRes.massFlow + massFlowRate
-    else outletRes:changeMass(actualMassChange)
-    end
+    inletRes:changeMass(-actualMassChange)
+    outletRes:changeMass(actualMassChange)
 end
 
 ---Vents pressure from reservoir into atmosphere.
@@ -72,9 +68,7 @@ function Reservoir:vent(area, deltaTime)
     local massChange = massFlowRate * deltaTime
     local actualMassChange = math.min(massChange, maxMassChange)
 
-    if self.massFlow ~= nil then self.massFlow = self.massFlow - massFlowRate
-    else self:changeMass(-actualMassChange)
-    end
+    self:changeMass(-actualMassChange)
 end
 
 ---@private
