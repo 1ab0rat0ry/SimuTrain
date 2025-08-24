@@ -6,7 +6,7 @@ local Cylinder = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/commo
 local Vehicle = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/rollingstock/Vehicle.out"
 ---@type DakoBv1
 local DakoBv1 = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/distributor/dako/DakoBV1.out"
----@type DakoBs2
+---@type DakoBS2
 local DakoBs2 = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/brakevalve/dako/DakoBS2.out"
 ---@type MathUtil
 local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.out"
