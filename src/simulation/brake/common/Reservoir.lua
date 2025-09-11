@@ -38,7 +38,8 @@ end
 function Reservoir:equalize(reservoir, area, deltaTime)
     local inletRes, outletRes = reservoir, self
 
-    if area == 0 or deltaTime == 0 then return end
+    if area <= 0 or deltaTime <= 0 then return end
+    if self.pressure <= 0 or reservoir.pressure <= 0 then return end
     if self.pressure > reservoir.pressure then
         inletRes = self
         outletRes = reservoir
@@ -60,6 +61,7 @@ end
 ---@param area number
 ---@param deltaTime number
 function Reservoir:vent(area, deltaTime)
+    if area <= 0 or deltaTime <= 0 then return end
     if self.pressure < ATM_PRESSURE then return end
 
     local massFlowRate = self:getMassFlowRate(self.pressure, self.temperature, ATM_PRESSURE, area)
@@ -155,7 +157,5 @@ end
 function Reservoir.getDensityFrom(pressure, temperature)
     return pressure / (SPECIFIC_GAS_CONSTANT * temperature)
 end
-
-Reservoir.atmosphere = Reservoir:new(1e3)
 
 return Reservoir
