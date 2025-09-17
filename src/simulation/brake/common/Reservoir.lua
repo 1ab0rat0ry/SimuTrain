@@ -57,6 +57,15 @@ function Reservoir:equalize(reservoir, area, deltaTime)
     outletRes:changeMass(actualMassChange)
 end
 
+--- @param reservoir Reservoir
+function Reservoir:averagePressure(reservoir)
+    local capacitySum = self.capacity + reservoir.capacity
+    local avgPressure = (self:getVolume() + reservoir:getVolume()) / capacitySum
+
+    self.pressure = avgPressure
+    reservoir.pressure = avgPressure
+end
+
 ---Vents pressure from reservoir into atmosphere.
 ---@param area number
 ---@param deltaTime number
@@ -142,6 +151,7 @@ function Reservoir:getVolume()
 end
 
 ---Get density of gas in reservoir.
+---@return number
 function Reservoir:getDensity()
     return self.pressure / (SPECIFIC_GAS_CONSTANT * self.temperature)
 end

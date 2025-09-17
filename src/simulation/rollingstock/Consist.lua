@@ -40,17 +40,19 @@ end
 ---Updates all vehicles in consist and propagates brake pipe.
 ---@param deltaTime number
 function Consist:update(deltaTime)
-    --local time = 0
+    --- @param i number
+    --- @param vehicle Vehicle
+    for i, vehicle in ipairs(self.vehicles) do
+        --- @type Vehicle
+        local previousVehicle = self.vehicles[i - 1]
 
-
-    --while time < deltaTime do
-    --    local fixedDeltaTime = deltaTime / math.ceil(deltaTime / MIN_TIME_STEP)
-
-        ---@param vehicle Vehicle
-        for _, vehicle in ipairs(self.vehicles.elements) do
-            vehicle.brakePipe:update(deltaTime)
-            vehicle:update(deltaTime)
+        if i > 1 and vehicle.feedPipe ~= nil and previousVehicle.feedPipe ~= nil then
+            previousVehicle.feedPipe:averagePressure(vehicle.feedPipe)
         end
+        vehicle.brakePipe:update(deltaTime)
+        vehicle:update(deltaTime)
+    end
+end
 
         --for _, vehicle in ipairs(self.vehicles.elements) do
         --    vehicle:update(deltaTime)
