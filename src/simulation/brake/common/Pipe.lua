@@ -71,12 +71,11 @@ end
 --- - available at: [https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808](https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808)
 ---@param deltaTime number
 function Pipe:calcVelocity(deltaTime)
-    local accel = self.velocity * self.massFlow / (self:getMass() * deltaTime)
     local dx = 0.5 * (self.front.length + self.rear.length) + self.length
     local velocityDx = (self.rear.velocity - self.front.velocity) / dx
     local pressureDx = (self.rear.pressure - self.front.pressure) / dx
+    local accel = -pressureDx / self:getDensity() - self.velocity * velocityDx
 
-    accel = accel - pressureDx / self:getDensity() - self.velocity * velocityDx
     self.velocity = self.velocity + (accel + self:getResistance()) * deltaTime
 end
 
@@ -90,7 +89,7 @@ function Pipe:calcDensity(deltaTime)
     local densityDx = (self.rear.density - self.front.density) / dx
     local densityDt = -self.velocity * densityDx - self:getDensity() * velocityDx
 
-    self:setDensity(self:getDensity() + densityDt * deltaTime + self.massFlow / self.capacity)
+    self:setDensity(self:getDensity() + densityDt * deltaTime)
 end
 
 ---Handles boundary conditions (closed end, open end) for the pipe segment.
@@ -191,11 +190,6 @@ function Pipe:setRear(rear)
 
     rear.frontPipe = self
     rear.frontCockOpen = true
-end
-
----@param massChange number
-function Pipe:changeMass(massChange)
-    self.massFlow = self.massFlow + massChange
 end
 
 return Pipe
