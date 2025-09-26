@@ -7,7 +7,6 @@ local ATM_DENSITY = Reservoir.getDensityFrom(ATM_PRESSURE, NORMAL_TEMP)
 
 local MIN_TIME_STEP = 0.04
 
-
 ---@class Pipe: Reservoir
 ---@field private velocity number
 ---@field private length number
@@ -59,8 +58,7 @@ function Pipe:update(deltaTime)
 
     for _ = 1, steps do
         self:updateNeighbours()
-        self:calcDensity(fixedDeltaTime)
-        self:calcVelocity(fixedDeltaTime)
+        self:integrateRK2(fixedDeltaTime)
     end
 
     self.massFlow = 0
@@ -90,6 +88,53 @@ function Pipe:calcDensity(deltaTime)
     local densityDt = -self.velocity * densityDx - self:getDensity() * velocityDx
 
     self:setDensity(self:getDensity() + densityDt * deltaTime)
+end
+
+--- Computes derivatives of state variables (density, velocity)
+---@return table derivatives {densityDt, velocityDt}
+function Pipe:calcDerivatives()
+    local dx = 0.5 * (self.front.length + self.rear.length) + self.length
+    local velocityDx = (self.rear.velocity - self.front.velocity) / dx
+    local densityDx = (self.rear.density - self.front.density) / dx
+    local pressureDx = (self.rear.pressure - self.front.pressure) / dx
+
+    local rho = self:getDensity()
+    local v = self.velocity
+
+    local densityDt = -v * densityDx - rho * velocityDx
+    local accel = -pressureDx / rho - v * velocityDx + self:getResistance()
+
+    return {densityDt = densityDt, velocityDt = accel}
+end
+
+--- Updates state (density, velocity) using RK2 Ralston method
+---@param deltaTime number
+function Pipe:integrateRK2(deltaTime)
+    -- k1
+    local k1 = self:calcDerivatives()
+
+    -- temporary state for k2
+    local rho_temp = self:getDensity() + (2 / 3) * deltaTime * k1.densityDt
+    local v_temp = self.velocity + (2 / 3) * deltaTime * k1.velocityDt
+
+    -- swap temporarily
+    local rho_old, v_old = self:getDensity(), self.velocity
+    self:setDensity(rho_temp)
+    self.velocity = v_temp
+
+    -- k2
+    local k2 = self:calcDerivatives()
+
+    -- restore old state
+    self:setDensity(rho_old)
+    self.velocity = v_old
+
+    -- final update
+    local rho_new = rho_old + deltaTime * (0.25 * k1.densityDt + 0.75 * k2.densityDt)
+    local v_new = v_old + deltaTime * (0.25 * k1.velocityDt + 0.75 * k2.velocityDt)
+
+    self:setDensity(rho_new)
+    self.velocity = v_new
 end
 
 ---Handles boundary conditions (closed end, open end) for the pipe segment.
