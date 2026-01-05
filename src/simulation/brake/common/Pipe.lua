@@ -61,6 +61,7 @@ function Pipe:update(deltaTime)
         self:integrateRK2(fixedDeltaTime)
     end
 
+    if math.abs(self.velocity) < 1e-9 then self.velocity = 0 end
     self.massFlow = 0
 end
 
