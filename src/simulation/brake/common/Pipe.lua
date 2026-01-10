@@ -3,9 +3,6 @@ local Reservoir = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/comm
 
 local NORMAL_TEMP = 273.15
 local ATM_PRESSURE = 101325
-local ATM_DENSITY = Reservoir.getDensityFrom(ATM_PRESSURE, NORMAL_TEMP)
-
-local MIN_TIME_STEP = 0.04
 
 ---@class Pipe: Reservoir
 ---@field private velocity number
@@ -53,89 +50,76 @@ end
 ---Updates state of pipe segment.
 ---@param deltaTime number
 function Pipe:update(deltaTime)
-    local steps = math.ceil(deltaTime / MIN_TIME_STEP)
-    local fixedDeltaTime = deltaTime / steps
-
-    for _ = 1, steps do
-        self:updateNeighbours()
-        self:integrateRK2(fixedDeltaTime)
-    end
+    self:updateNeighbours()
+    self:integrateRK4(deltaTime)
 
     if math.abs(self.velocity) < 1e-9 then self.velocity = 0 end
     self.massFlow = 0
 end
 
----Calculates velocity change in time using momentum equation.
---- - source: *Freight train air brake models*, equation 38
---- - available at: [https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808](https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808)
----@param deltaTime number
-function Pipe:calcVelocity(deltaTime)
+---Calculates time derivatives of pressure and velocity.
+--- - source: *A parametric library for the simulation of a UIC pneumatic braking system*, equations 1 and 2
+--- - available at: [https://flore.unifi.it/retrieve/e398c378-8947-179a-e053-3705fe0a4cff/PUGI_14.pdf](https://flore.unifi.it/retrieve/e398c378-8947-179a-e053-3705fe0a4cff/PUGI_14.pdf)
+---@param pressure number
+---@param density number
+---@param velocity number
+---@return number, number
+function Pipe:calcDerivatives(pressure, density, velocity)
     local dx = 0.5 * (self.front.length + self.rear.length) + self.length
     local velocityDx = (self.rear.velocity - self.front.velocity) / dx
     local pressureDx = (self.rear.pressure - self.front.pressure) / dx
-    local accel = -pressureDx / self:getDensity() - self.velocity * velocityDx
 
-    self.velocity = self.velocity + (accel + self:getResistance()) * deltaTime
+    local pressureDt = -velocity * pressureDx - pressure * velocityDx
+    local velocityDt = -pressureDx / density - velocity * velocityDx + self:getResistance(density, velocity)
+
+    return pressureDt, velocityDt
 end
 
----Calculates density change in time continuity equation.
---- - source: *Freight train air brake models*, equation 37
---- - available at: [https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808](https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808)
+---Updates pressure and velocity using Euler's method
 ---@param deltaTime number
-function Pipe:calcDensity(deltaTime)
-    local dx = 0.5 * (self.front.length + self.rear.length) + self.length
-    local velocityDx = (self.rear.velocity - self.front.velocity) / dx
-    local densityDx = (self.rear.density - self.front.density) / dx
-    local densityDt = -self.velocity * densityDx - self:getDensity() * velocityDx
+function Pipe:integrateEuler(deltaTime)
+    local pressureDt, velocityDt = self:calcDerivatives(self.pressure, self:getDensity(), self.velocity)
 
-    self:setDensity(self:getDensity() + densityDt * deltaTime)
+    self.pressure = self.pressure + deltaTime * pressureDt
+    self.velocity = self.velocity + deltaTime * velocityDt
 end
 
---- Computes derivatives of state variables (density, velocity)
----@return table derivatives {densityDt, velocityDt}
-function Pipe:calcDerivatives()
-    local dx = 0.5 * (self.front.length + self.rear.length) + self.length
-    local velocityDx = (self.rear.velocity - self.front.velocity) / dx
-    local densityDx = (self.rear.density - self.front.density) / dx
-    local pressureDx = (self.rear.pressure - self.front.pressure) / dx
-
-    local rho = self:getDensity()
-    local v = self.velocity
-
-    local densityDt = -v * densityDx - rho * velocityDx
-    local accel = -pressureDx / rho - v * velocityDx + self:getResistance()
-
-    return {densityDt = densityDt, velocityDt = accel}
-end
-
---- Updates state (density, velocity) using RK2 Ralston method
+---Updates pressure and velocity using Ralston's RK2 method
 ---@param deltaTime number
 function Pipe:integrateRK2(deltaTime)
-    -- k1
-    local k1 = self:calcDerivatives()
+    local k1PressureDt, k1VelocityDt = self:calcDerivatives(self.pressure, self:getDensity(), self.velocity)
 
-    -- temporary state for k2
-    local rho_temp = self:getDensity() + (2 / 3) * deltaTime * k1.densityDt
-    local v_temp = self.velocity + (2 / 3) * deltaTime * k1.velocityDt
+    local pressure2 = self.pressure + 2 / 3 * deltaTime * k1PressureDt
+    local velocity2 = self.velocity + 2 / 3 * deltaTime * k1VelocityDt
+    local density2 = self.getDensityFrom(pressure2, self.temperature)
+    local k2PressureDt, k2VelocityDt = self:calcDerivatives(pressure2, density2, velocity2)
 
-    -- swap temporarily
-    local rho_old, v_old = self:getDensity(), self.velocity
-    self:setDensity(rho_temp)
-    self.velocity = v_temp
+    self.pressure = self.pressure + deltaTime * (0.25 * k1PressureDt + 0.75 * k2PressureDt)
+    self.velocity = self.velocity + deltaTime * (0.25 * k1VelocityDt + 0.75 * k2VelocityDt)
+end
 
-    -- k2
-    local k2 = self:calcDerivatives()
+---Updates pressure and velocity using RK4 method
+---@param deltaTime number
+function Pipe:integrateRK4(deltaTime)
+    local k1PressureDt, k1VelocityDt = self:calcDerivatives(self.pressure, self:getDensity(), self.velocity)
 
-    -- restore old state
-    self:setDensity(rho_old)
-    self.velocity = v_old
+    local pressure2 = self.pressure + 0.5 * deltaTime * k1PressureDt
+    local velocity2 = self.velocity + 0.5 * deltaTime * k1VelocityDt
+    local density2 = self.getDensityFrom(pressure2, self.temperature)
+    local k2PressureDt, k2VelocityDt = self:calcDerivatives(pressure2, density2, velocity2)
 
-    -- final update
-    local rho_new = rho_old + deltaTime * (0.25 * k1.densityDt + 0.75 * k2.densityDt)
-    local v_new = v_old + deltaTime * (0.25 * k1.velocityDt + 0.75 * k2.velocityDt)
+    local pressure3 = self.pressure + 0.5 * deltaTime * k2PressureDt
+    local velocity3 = self.velocity + 0.5 * deltaTime * k2VelocityDt
+    local density3 = self.getDensityFrom(pressure3, self.temperature)
+    local k3PressureDt, k3VelocityDt = self:calcDerivatives(pressure3, density3, velocity3)
 
-    self:setDensity(rho_new)
-    self.velocity = v_new
+    local pressure4 = self.pressure + deltaTime * k3PressureDt
+    local velocity4 = self.velocity + deltaTime * k3VelocityDt
+    local density4 = self.getDensityFrom(pressure4, self.temperature)
+    local k4PressureDt, k4VelocityDt = self:calcDerivatives(pressure4, density4, velocity4)
+
+    self.pressure = self.pressure + deltaTime * (k1PressureDt + 2 * k2PressureDt + 2 * k3PressureDt + k4PressureDt) / 6
+    self.velocity = self.velocity + deltaTime * (k1VelocityDt + 2 * k2VelocityDt + 2 * k3VelocityDt + k4VelocityDt) / 6
 end
 
 ---Handles boundary conditions (closed end, open end) for the pipe segment.
@@ -145,24 +129,20 @@ function Pipe:updateNeighbours()
         self.front.length = self.frontPipe.length
         self.front.pressure = self.frontPipe.pressure
         self.front.velocity = self.frontPipe.velocity
-        self.front.density = self.frontPipe:getDensity()
     elseif self.frontCockOpen then
         --- Opened end boundary condition (no pipe connected, end of pipe is opened to atmosphere).
         --- We use virtual atmospheric segment with extrapolated pressure therefore pressure
         --- at the pipe boundary will be equal to atmospheric pressure and we get correct
-        --- acceleration due to pressure gradient. Density is set to atmospheric density
-        --- for correct flow calculation.
+        --- acceleration due to pressure gradient.
         self.front.length = self.length
         self.front.pressure = 2 * ATM_PRESSURE - self.pressure
         self.front.velocity = self.velocity
-        self.front.density = ATM_DENSITY
     else
         --- Closed end boundary condition. Again we use virtual segment with pressure equal
         --- to the last segment's pressure and velocity has opposite sign for correct wave reflection.
         self.front.length = self.length
         self.front.pressure = self.pressure
         self.front.velocity = -self.velocity
-        self.front.density = self:getDensity()
     end
 
     --- Same logic as above but for the rear end of pipe.
@@ -170,34 +150,35 @@ function Pipe:updateNeighbours()
         self.rear.length = self.rearPipe.length
         self.rear.pressure = self.rearPipe.pressure
         self.rear.velocity = self.rearPipe.velocity
-        self.rear.density = self.rearPipe:getDensity()
     elseif self.rearCockOpen then
         self.rear.length = self.length
         self.rear.pressure = 2 * ATM_PRESSURE - self.pressure
         self.rear.velocity = self.velocity
-        self.rear.density = ATM_DENSITY
     else
         self.rear.length = self.length
         self.rear.pressure = self.pressure
         self.rear.velocity = -self.velocity
-        self.rear.density = self:getDensity()
     end
 end
 
 ---Calculates resistance due to friction.
---- - source: *Freight train air brake models*, equation 20
---- - available at: [https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808](https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808)
+--- - source: *A parametric library for the simulation of a UIC pneumatic braking system*, equations 5
+--- - available at: [https://flore.unifi.it/retrieve/e398c378-8947-179a-e053-3705fe0a4cff/PUGI_14.pdf](https://flore.unifi.it/retrieve/e398c378-8947-179a-e053-3705fe0a4cff/PUGI_14.pdf)
+---@param density number
+---@param velocity number
 ---@return number
-function Pipe:getResistance()
-    return -0.5 * self:getFrictionFactor() * self:getDensity() / self.diameter * self.velocity * math.abs(self.velocity)
+function Pipe:getResistance(density, velocity)
+    return -0.5 * self:getFrictionFactor(density, velocity) * density / self.diameter * velocity * math.abs(velocity)
 end
 
 ---Calculates friction factor from reynolds number.
 --- - source: *Freight train air brake models*, equation 22
 --- - available at: [https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808](https://www.tandfonline.com/doi/full/10.1080/23248378.2021.2006808)
+---@param density number
+---@param velocity number
 ---@return number
-function Pipe:getFrictionFactor()
-    local reynoldsNumber = self:getReynoldsNumber()
+function Pipe:getFrictionFactor(density, velocity)
+    local reynoldsNumber = self:getReynoldsNumber(density, velocity)
 
     if reynoldsNumber == 0 then
         return 0
@@ -215,9 +196,11 @@ end
 
 ---Calculates reynolds number.
 --- - source: [https://en.wikipedia.org/wiki/Reynolds_number#Definition](https://en.wikipedia.org/wiki/Reynolds_number#Definition)
+---@param density number
+---@param velocity number
 ---@return number
-function Pipe:getReynoldsNumber()
-    return self:getDensity() * math.abs(self.velocity) * self.diameter / self:getDynamicViscosity()
+function Pipe:getReynoldsNumber(density, velocity)
+    return density * math.abs(velocity) * self.diameter / self:getDynamicViscosity()
 end
 
 ---@param front Pipe
