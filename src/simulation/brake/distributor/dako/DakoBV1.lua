@@ -2,11 +2,10 @@
 local Reservoir = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/common/Reservoir.out"
 ---@type MathUtil
 local MathUtil = require "Assets/1ab0rat0ry/SimuTrain/src/utils/math/MathUtil.out"
----@type DakoDistributorValve
-local DakoDistributorValve = require "Assets/1ab0rat0ry/SimuTrain/src/simulation/brake/distributor/dako/DakoDistributorValve.out"
 
-local CYLINDER_PRESSURE_COEF = 2.533
+local CYLINDER_PRESSURE_COEF = 2.667
 local CYLINDER_INSHOT_PRESSURE = 0.69
+local CYLINDER_MAX_PRESSURE = 3.8
 
 local ACCEL_CHAMBER_CAPACITY = 0.00046
 
@@ -15,18 +14,21 @@ local VENT_VALVE_OPEN_THRESHOLD = 0.2
 
 local ACCELERATION_CHOKE = 1e-5
 local VENTILATION_CHOKE = 3e-6
-local AUX_RES_CHOKE = 4.4e-6
-local DISTRIBUTOR_RES_CHOKE = 3.96e-7
-local AUX_RES_REFILL_CHOKE = 1.5e-5
-local INSHOT_CHOKE = 1e-4
+local AUX_RES_CHOKE = MathUtil.getCircularAreaD(0.0023)
+local DISTRIBUTOR_RES_CHOKE = MathUtil.getCircularAreaD(0.00059)
+local AUX_RES_REFILL_CHOKE_1 = MathUtil.getCircularAreaD(0.0022)
+local AUX_RES_REFILL_CHOKE_2 = MathUtil.getCircularAreaD(0.0018)
+local INSHOT_CHOKE = 0.5e-5
 local CYLINDER_FILL_CHOKE = MathUtil.getCircularAreaD(0.006)
-local CYLINDER_EMPTY_CHOKE = MathUtil.getCircularAreaD(0.006)
+local CYLINDER_EMPTY_CHOKE = MathUtil.getCircularAreaD(0.0032)
+
+local DISTRIBUTOR_PISTON_AREA = MathUtil.getCircularAreaD(0.085)
 
 ---@class DakoBV1: Distributor
 ---@field public turnOffValve boolean
 ---@field private acceleratorValve number
 ---@field private ventilationValve number
----@field private distributorValve DakoDistributorValve
+---@field private distributorValve number
 ---@field private inshotValve number
 ---
 ---@field private brakePipeChamber Reservoir
@@ -48,7 +50,7 @@ function DakoBV1:new(brakePipe, distributorRes, auxiliaryRes, outputRes)
         turnOffValve = true,
         acceleratorValve = 0,
         ventilationValve = 0,
-        distributorValve = DakoDistributorValve:new(CYLINDER_PRESSURE_COEF),
+        distributorValve = 0,
         inshotValve = 1,
 
         brakePipeChamber = brakePipe,
@@ -102,29 +104,58 @@ end
 ---@private
 ---@param deltaTime number
 function DakoBV1:updateConnectingMechanism(deltaTime)
-    local shutterValve = MathUtil.clamp(10 * (self.brakePipeChamber:getManoPressure() - self.auxiliaryRes:getManoPressure() - 0.1), 0, 1)
-    local refillValve = MathUtil.clamp(5 * (self.distributorRes:getManoPressure() - self.auxiliaryRes:getManoPressure() - 0.1), 0, 1)
+    if self.distributorRes:getManoPressure() < self.auxiliaryRes:getManoPressure() + 0.1 then return end
+
+    local shutterValve = MathUtil.inverseLerp(1e-5 * (self.brakePipeChamber.pressure - self.auxiliaryRes.pressure), 0.01, 0.05)
+    local refillChoke = AUX_RES_REFILL_CHOKE_1 + AUX_RES_REFILL_CHOKE_2
 
     if self.brakePipeChamber:getManoPressure() - self.auxiliaryRes:getManoPressure() > 1 then
-        shutterValve = 0.2
+        refillChoke = AUX_RES_REFILL_CHOKE_2
     end
-    self.auxiliaryRes:equalize(self.brakePipeChamber, AUX_RES_REFILL_CHOKE * math.min(shutterValve, refillValve), deltaTime)
+    self.auxiliaryRes:equalize(self.brakePipeChamber, refillChoke * shutterValve, deltaTime)
 end
 
 ---Regulates pressure in brake cylinder.
 ---@private
 ---@param deltaTime number
 function DakoBV1:updateDistributorMechanism(deltaTime)
-    self.distributorValve:update(deltaTime, self.brakePipeChamber, self.distributorRes, self.outputRes)
+    local inshotValve = MathUtil.inverseLerp(
+        self.outputRes:getManoPressure(),
+        CYLINDER_INSHOT_PRESSURE,
+        CYLINDER_INSHOT_PRESSURE - 0.1
+    )
 
-    local inshotValve = MathUtil.inverseLerp(self.outputRes:getManoPressure(), CYLINDER_INSHOT_PRESSURE, CYLINDER_INSHOT_PRESSURE - 0.1)
+    self:updateDistributorValve(deltaTime)
 
-    if self.distributorValve.position > 0 then
-        self.outputRes:equalize(self.auxiliaryRes, self.distributorValve.position * (CYLINDER_FILL_CHOKE + INSHOT_CHOKE * inshotValve), deltaTime)
-    elseif self.distributorValve.position < 0 then
-        self.outputRes:vent(CYLINDER_EMPTY_CHOKE * math.abs(self.distributorValve.position), deltaTime)
+    if self.distributorValve > 0 then
+        self.outputRes:equalize(self.auxiliaryRes, inshotValve * self.distributorValve * INSHOT_CHOKE, deltaTime)
+        self.outputRes:equalize(self.auxiliaryRes, self.distributorValve * CYLINDER_FILL_CHOKE, deltaTime)
+    elseif self.distributorValve < 0 then
+        self.outputRes:vent(-self.distributorValve * CYLINDER_EMPTY_CHOKE, deltaTime)
     end
     self.outputRes:update(deltaTime)
+end
+
+---Updates position of distributor valve.
+---@param deltaTime number
+function DakoBV1:updateDistributorValve(deltaTime)
+    local outputPressureBar = self.outputRes:getManoPressure()
+    local outputPressureTarget = CYLINDER_PRESSURE_COEF * (self.distributorRes:getManoPressure() - self.brakePipeChamber:getManoPressure()) - 0.2
+    local distributorValveTarget = MathUtil.clamp(4 * (outputPressureTarget - outputPressureBar), -1, 1)
+    local pressureLimit = MathUtil.inverseLerp(
+        outputPressureBar,
+        CYLINDER_MAX_PRESSURE,
+        CYLINDER_MAX_PRESSURE - 0.2)
+
+    if outputPressureTarget < CYLINDER_INSHOT_PRESSURE and distributorValveTarget > 0 then
+        distributorValveTarget = MathUtil.clamp(4 * (CYLINDER_INSHOT_PRESSURE - outputPressureBar), -1, 1)
+    end
+    self.distributorValve = self.distributorValve + (distributorValveTarget - self.distributorValve) * deltaTime
+    self.distributorValve = math.min(pressureLimit, self.distributorValve)
+
+    if math.abs(self.distributorValve) < 1e-4 then
+        self.distributorValve = 0
+    end
 end
 
 return DakoBV1
