@@ -12,7 +12,7 @@ funkcie a možné zásadné zmeny v kóde. ⚠️
 - **Simulácia na úrovni jednotlivých vozňov:**
   - každý vozeň v súprave má simulované vlastné brzdové vybavenie
   - vozidlá produkujú brzdnú silu podľa ich konfigurácie a tlaku v brzdovom valci
-- **Fyzikálne riadená simulácia:**
+- **Simulácia založená na fyzike:**
   - tlak sa počíta podľa stavovej rovnice ideálneho plynu
   - prietok vzduchu je určený vlastnosťami vzduchu, pomerom tlakov a veľkosťou dýzy
   - hydrodynamický model brzdového potrubia simuluje realistické šírenie tlakových vĺn
