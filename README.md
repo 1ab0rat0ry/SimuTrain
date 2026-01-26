@@ -1,38 +1,35 @@
 # SimuTrain
-[Slovenčina](README.sk.md)
+[English](README.en.md)
 
-SimuTrain is a script library for the game **Train Simulator Classic** that simulates
-the functioning of railway brake systems. It uses physical equations and formulas
-to achieve the most faithful representation of individual components.
+SimuTrain je knižnica skriptov pre hru **Train Simulator Classic**, ktorá simuluje
+fungovanie brzdového systému železničných vozidiel. Pre čo najvernejšiu simuláciu
+jednotlivých komponentov využíva fyzikálne rovnice a vzorce.
 
-⚠️ This project is in a very early stage of development. Expect bugs, missing
-or incomplete features, and potentially major breaking changes. ⚠️
+⚠️ Projekt je vo veľmi ranom štádiu vývoja. Očakávajte chyby, chýbajúce či nedokončené
+funkcie a možné zásadné zmeny v kóde. ⚠️
 
-## Features
-- **Per-vehicle simulation:**
-  - each vehicle in a consist has its own simulated brake equipment
-  - vehicles generate brake forces based on their configuration 
-  and brake cylinder pressure
-- **Physics-based modeling:**
-  - pressure calculated using the ideal gas law
-  - airflow determined by air properties, pressure ratio, and orifice area
-  - a fluid dynamics brake pipe model simulates realistic propagation
-  of pressure waves within a consist, causing delayed and slower response
-  in brake application and release
-- **Simulated equipment:**
-  - brake valve **Dako BS2**
-  - distributor **Dako BV1**
+## Funkcie
+- **Simulácia na úrovni jednotlivých vozňov:**
+  - každý vozeň v súprave má simulované vlastné brzdové vybavenie
+  - vozidlá produkujú brzdnú silu podľa ich konfigurácie a tlaku v brzdovom valci
+- **Simulácia založená na fyzike:**
+  - tlak sa počíta podľa stavovej rovnice ideálneho plynu
+  - prietok vzduchu je určený vlastnosťami vzduchu, pomerom tlakov a veľkosťou dýzy
+  - hydrodynamický model brzdového potrubia simuluje realistické šírenie tlakových vĺn
+  v súprave, čo vedie k oneskorenej a pomalšej odozve pri brzdení a odbrzďovaní súpravy
+- **Simulované zariadenia:**
+  - brzdič **Dako BS2**
+  - rozvádzač **Dako BV1**
 
-## Limitations
-While the goal is to provide the most realistic simulation possible,
-some simplifications are necessary due to game limitations
-or to balance realism and performance.
+## Obmedzenia
+Aj keď cieľom je dosiahnuť čo najrealistickejšiu simuláciu, vzhľadom na obmedzenia hry
+a potrebu vyváženia realizmu a náročnosti na výpočtový výkon, sú urobené 
+niektoré zjednodušenia. 
 
-- all simulation runs in the script of the player-driven vehicle
-- brake force cannot be applied individually per vehicle — only to the entire consist
-using the `TrainBrakeControl` value
-- vehicles must have the field `Max force percent of vehicle weight`
-correctly configured in their simulation blueprint to produce proper brake force
-- automatic consist composition based on vehicles added in-game is not supported
-- all simulated processes are currently assumed to be isothermal,
-with air temperature fixed at 0 °C
+- simulácia prebieha iba v skripte vozidla ovládaného hráčom
+- brzdná sila sa nedá aplikovať na jednotlivé vozidlá — ovplyvňuje
+iba celú súpravu prostredníctvom hodnoty `TrainBrakeControl`
+- vozidlá musia mať v simulačnom blueprint-e správne nastavené pole `Max force 
+percent of vehicle weight`, aby bola simulovaná správna brzdná sila
+- automatické skladanie súpravy podľa vozňov pridaných v hre nie je podporované
+- všetky procesy sú simulované ako izotermické, s pevne danou teplotou vzduchu 0 °C
