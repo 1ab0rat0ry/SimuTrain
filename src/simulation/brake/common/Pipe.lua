@@ -15,7 +15,6 @@ local ATM_PRESSURE = 101325
 ---@field private rearPipe Pipe
 ---@field private front Pipe
 ---@field private rear Pipe
----@field private massFlow number
 local Pipe = {}
 Pipe.__index = Pipe
 setmetatable(Pipe, Reservoir)
@@ -38,8 +37,6 @@ function Pipe:new(length, diameter)
         rearPipe = nil,
         front = {},
         rear = {},
-
-        massFlow = 0
     }
     instance = setmetatable(instance, self)
     instance.capacity = instance.area * length
@@ -50,11 +47,15 @@ end
 ---Updates state of pipe segment.
 ---@param deltaTime number
 function Pipe:update(deltaTime)
-    self:updateNeighbours()
-    self:integrateRK4(deltaTime)
+    local steps = math.ceil(deltaTime / 0.02)
+    local fixedDeltaTime = deltaTime / steps
+
+    for _ = 1, steps do
+        self:updateNeighbours()
+        self:integrateRK4(fixedDeltaTime)
+    end
 
     if math.abs(self.velocity) < 1e-9 then self.velocity = 0 end
-    self.massFlow = 0
 end
 
 ---Calculates time derivatives of pressure and velocity.
@@ -75,6 +76,7 @@ function Pipe:calcDerivatives(pressure, density, velocity)
     return pressureDt, velocityDt
 end
 
+--TODO explore Adams-Bashforth, Adams-Moulton methods, method of characteristics, riemann solver
 ---Updates pressure and velocity using Euler's method
 ---@param deltaTime number
 function Pipe:integrateEuler(deltaTime)
