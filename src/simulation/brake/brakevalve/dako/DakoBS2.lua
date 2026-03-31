@@ -185,9 +185,9 @@ end
 ---@return number Percentage of opening.
 function DakoBS2:getInterruptValve(position)
     if position < self.thresholds.RUNNING then return 1
-    elseif position < self.thresholds.NEUTRAL then return 0.15
+    elseif position < self.thresholds.NEUTRAL then return 0.2
     elseif position < self.thresholds.MIN_REDUCTION then return 0
-    elseif position < self.thresholds.CUTOFF then return 0.15
+    elseif position < self.thresholds.CUTOFF then return 0.2
     end
 
     return 0

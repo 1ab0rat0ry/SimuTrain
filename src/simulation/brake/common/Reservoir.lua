@@ -164,6 +164,7 @@ end
 
 ---@param pressure number
 ---@param temperature number
+---@return number
 function Reservoir.getDensityFrom(pressure, temperature)
     return pressure / (SPECIFIC_GAS_CONSTANT * temperature)
 end

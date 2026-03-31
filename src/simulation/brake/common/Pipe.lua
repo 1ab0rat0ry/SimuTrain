@@ -170,7 +170,7 @@ end
 ---@param velocity number
 ---@return number
 function Pipe:getResistance(density, velocity)
-    return -0.5 * self:getFrictionFactor(density, velocity) * density / self.diameter * velocity * math.abs(velocity)
+    return -0.5 * self:getFrictionFactor(density, velocity) / self.diameter * velocity * math.abs(velocity)
 end
 
 ---Calculates friction factor from reynolds number.
